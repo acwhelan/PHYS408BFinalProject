@@ -7,7 +7,7 @@ keywords: {Superconducting cables;Critical current density (superconductivity);H
 Install FreeFem++ here: https://github.com/FreeFem/FreeFem-sources/releases
 
 After installation, I run FreeFem++ on commandline, using the command: 
-    FreeForm++ test1.edp
+    FreeFem++ test1.edp
 
 Note: 
     Mac users may need to install Rosetta 2 in order to install and run FreeFem++. 
