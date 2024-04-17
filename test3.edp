@@ -1,0 +1,50 @@
+bool s=0; string c="AVG"; if(s){c="MAX";} //Ic criteria: s=(1->MAX,0->AVG)
+real Jc0=28.7e6, Bc=35e-3, b=0.6, k=0.25; // Jc(B) parameter, Critical current density converted from A/mm² to A/m²
+int ns=9, ny=4; // Corrected to have ny as an integer.
+real th=1e-6, sw=2e-3, rg=4e-4, sg=136e-6, n=21, tolAz=1e-5, tolp=1e-5;
+real I0=Jc0*th*sw, x0=-sw-rg/2, y0=-((th+sg)*ny-sg)/2, E=0, Ec=1e-4, err;
+real[int] XC(ns), YC(ns), Ics(ns), p(ns^2), pn(p.n); p=0.9; pn=0.9;
+int[int] cm(1), hm(ns), vm(ns); cm=50; hm=-50; vm=-1; // Reverted to finer mesh
+
+///////////////////// Creation of geometry and mesh ///////////////////////
+for(int i=0; i<ns; i++){XC[i]=x0+(rg+sw)*(i/ny); YC[i]=y0+(sg+th)*(i%ny);}
+border bb (t=0, 2*pi) {x=20*sw*cos(t); y=20*sw*sin(t); label= 1;}
+border top (t=0, 1; i) {x=XC[i]+t*sw; y=YC[i]+th; label=i+2;}
+border right (t=0, 1; i) {x=XC[i]+sw; y=YC[i]+(1-t)*th; label=i+2;}
+border bottom(t=0, 1; i) {x=XC[i]+(1-t)*sw; y=YC[i]; label=i+2;}
+border left (t=0, 1; i) {x=XC[i]; y=YC[i]+t*th; label=i+2;}
+mesh Th=buildmesh(bb(cm)+top(hm)+right(vm)+bottom(hm)+left(vm));
+
+//////////////////////// Build FEM Solution Space /////////////////////////
+fespace Vh(Th,P2); // Quadratic elements for Az
+Vh Az, Az0, v;
+fespace Wh(Th,P1dc); // Piecewise-linear discontinuous elements for J
+Wh J=Jc0;
+p[Th(0,0).region]=0; // p=0 in the Air region
+///////// JcB and J as functions of Az using the dummy variable u /////////
+macro JcB(u) Jc0/(1+sqrt((k*dy(u))^2+(-dx(u))^2)/Bc)^b //
+macro J(u) JcB(u)*(p[region])//
+//PDE(in weak form) Div(Grad(Az))+mu0*Jc(B)*p=0 and boundary condition Az=0
+problem Pmodel(Az,v)=int2d(Th)(dx(Az)*dx(v)+dy(Az)*dy(v))
+ -int2d(Th)(4e-7*pi*J(Az0)*v)+on(1,Az=0);
+
+/////////////////// Solution using an iterative solver ////////////////////
+while(abs(p.max-1)*s+abs(pn(0:ns:1).sum/ns-1)*(1-s)>tolp){ // Ic criterion
+ err=1; // Reset err variable
+ while(err > tolAz){ // Self consistency loop
+ Az0=Az; // Update old Az estimate
+ Pmodel; // Run FEM problem
+ for(int j=0; j < ns; j++){ // Ic and p value of j-th strand
+ Ics(j)=int2d(Th,j)(JcB(Az));
+ p(j)=I0/Ics(j);}
+ Az0=Az-Az0; // Difference between old and new Az estimates
+ err=Az0[].linfty;} // Error defined using the L-infinity norm
+ for(int i=0; i<ns; i++){pn(i)=p(i)^n;}
+ E= pn(0:ns:1).sum/ns*Ec; // Average electric field in cable
+ I0=2*I0/((1+p.max)*s+(1+(E/Ec)^(1/n))*(1-s));}//Net current in strand
+
+/////////////////Post Processing: Output data and plotting/////////////////
+cout <<endl<<endl<< "Ic= " << ns*I0 <<" A"<<" ("<< c <<" criteria)"<<endl;
+Vh B=sqrt(dx(Az)^2+dy(Az)^2);
+plot(B, bb=[[-1.1*x0,-1.1*y0],[1.1*x0,1.1*y0]], wait=1, fill=1, value=1);
+
